@@ -13,6 +13,9 @@ use Concrete\Core\Command\Task\Runner\BatchProcessTaskRunner;
 use Concrete\Core\Command\Task\Runner\TaskRunnerInterface;
 use Concrete\Core\Command\Task\TaskInterface;
 use Concrete\Core\Database\Connection\Connection;
+use Concrete\Core\Calendar\Event\Command\ClearEventIndexCommand;
+use Concrete\Core\Calendar\Event\Command\RebuildEventIndexCommand;
+use Concrete\Core\Calendar\Event\Command\ReindexEventTaskCommand;
 use Concrete\Core\Express\Command\ClearEntityIndexCommand;
 use Concrete\Core\Express\Command\RebuildEntityIndexCommand;
 use Concrete\Core\Express\Command\ReindexEntryTaskCommand;
@@ -61,7 +64,7 @@ class ReindexContentController extends AbstractController
 
     public function getDescription(): string
     {
-        return t('Reindex pages, files, users and Express objects.');
+        return t('Reindex pages, files, users, events and Express objects.');
     }
 
     public function getInputDefinition(): ?Definition
@@ -79,6 +82,7 @@ class ReindexContentController extends AbstractController
                     'pages' => t('Pages'),
                     'files' => t('Files'),
                     'users' => t('Users'),
+                    'events' => t('Events'),
                     'express' => t('Express'),
                 ],
                 true
@@ -170,6 +174,22 @@ class ReindexContentController extends AbstractController
             $query->orderBy('u.uID', 'asc');
             foreach($query->execute()->fetchAll() as $result) {
                 $batch->add(new ReindexUserTaskCommand($result['uID']));
+            }
+        } else if ($object == 'events') {
+            if ($input->hasField('clear')) {
+                $batch->add(new ClearEventIndexCommand());
+            }
+            if ($input->hasField('rebuild')) {
+                $batch->add(new RebuildEventIndexCommand());
+            }
+            $query->select('eventID')->from('CalendarEvents', 'ev');
+            if ($after) {
+                $query->andWhere('ev.eventID > :after');
+                $query->setParameter('after', $after);
+            }
+            $query->orderBy('ev.eventID', 'asc');
+            foreach($query->execute()->fetchAll() as $result) {
+                $batch->add(new ReindexEventTaskCommand($result['eventID']));
             }
         }
 
